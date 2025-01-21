@@ -1,6 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Image, FlatList, ActivityIndicator, SafeAreaView } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Image,
+  FlatList,
+  ActivityIndicator,
+  SafeAreaView,
+  Button,
+  Platform,
+  PermissionsAndroid,
+  Alert,
+} from 'react-native';
 import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 
 interface User {
   id: number;
@@ -25,6 +39,44 @@ export default function App() {
         setLoading(false);
       });
   }, []);
+
+  const requestPermission = async () => {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied!', 'You need to grant media permissions to download images.');
+      return false;
+    }
+    return true;
+  };
+
+  const downloadImage = async (user: User) => {
+    try {
+      const hasPermission = await requestPermission();
+      if (!hasPermission) return;
+
+      // Fetch the image as binary data
+      const response = await fetch(user.avatar_url);
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      reader.onloadend = async () => {
+        const base64Image = reader.result as string;
+
+        // Create a unique path to save the image
+        const fileUri = FileSystem.documentDirectory + `${user.login}.jpg`;
+
+        // Save the file to the document directory (local storage)
+        await FileSystem.writeAsStringAsync(fileUri, base64Image, { encoding: FileSystem.EncodingType.Base64 });
+
+        Alert.alert('Success', `Image for ${user.login} saved at ${fileUri}`);
+      };
+
+      reader.readAsDataURL(blob); // This starts the read
+    } catch (err) {
+      console.error('Failed to download image:', err);
+      Alert.alert('Error', `Failed to download image for ${user.login}.`);
+    }
+  };
 
   if (loading) {
     return (
@@ -54,6 +106,7 @@ export default function App() {
           <View style={styles.userCard}>
             <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
             <Text style={styles.username}>{item.login}</Text>
+            <Button title="Download Avatar" onPress={() => downloadImage(item)} />
           </View>
         )}
       />
